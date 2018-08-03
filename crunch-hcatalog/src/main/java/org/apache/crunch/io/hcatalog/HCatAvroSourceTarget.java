@@ -41,32 +41,31 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.ql.metadata.Table;
+import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hive.hcatalog.common.HCatConstants;
 import org.apache.hive.hcatalog.common.HCatUtil;
-import org.apache.hive.hcatalog.data.HCatRecord;
 import org.apache.hive.hcatalog.data.schema.HCatSchema;
-import org.apache.hive.hcatalog.mapreduce.HCatInputFormat;
+import org.apache.hive.hcatalog.mapreduce.HcatAvroInputFormat;
 import org.apache.hive.hcatalog.mapreduce.InputJobInfo;
 import org.apache.hive.hcatalog.mapreduce.PartInfo;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.hadoop.hive.metastore.Warehouse.DEFAULT_DATABASE_NAME;
-
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import javax.annotation.Nullable;
 
-public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget<HCatRecord> {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(HCatSourceTarget.class);
-  private static final PType<HCatRecord> PTYPE = Writables.writables(HCatRecord.class);
+public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTarget<AvroGenericRecordWritable> {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(HCatAvroSourceTarget.class);
+  private static final PType<AvroGenericRecordWritable> PTYPE = Writables.writables(AvroGenericRecordWritable.class);
   private Configuration hcatConf;
 
-  private final FormatBundle<HCatInputFormat> bundle = FormatBundle.forInput(HCatInputFormat.class);
+  private final FormatBundle<HcatAvroInputFormat> bundle = FormatBundle.forInput(HcatAvroInputFormat.class);
   private final String database;
   private final String table;
   private final String filter;
@@ -77,13 +76,12 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
 
   /**
    * Creates a new instance to read from the specified {@code table} and the
-   * {@link org.apache.hadoop.hive.metastore.Warehouse#DEFAULT_DATABASE_NAME
    * default} database
    *
    * @param table
    * @throw IllegalArgumentException if table is null or empty
    */
-  public HCatSourceTarget(String table) {
+  public HCatAvroSourceTarget(String table) {
     this(Warehouse.DEFAULT_DATABASE_NAME, table);
   }
 
@@ -97,7 +95,7 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
    *          the table to read from
    * @throw IllegalArgumentException if table is null or empty
    */
-  public HCatSourceTarget(String database, String table) {
+  public HCatAvroSourceTarget(String database, String table) {
     this(database, table, null);
   }
 
@@ -105,7 +103,6 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
    * Creates a new instance to read from the specified {@code database} and
    * {@code table}, restricting partitions by the specified {@code filter}. If
    * the database isn't specified it will default to the
-   * {@link org.apache.hadoop.hive.metastore.Warehouse#DEFAULT_DATABASE_NAME
    * default} database.
    *
    * @param database
@@ -116,27 +113,27 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
    *          the filter to apply to find partitions
    * @throw IllegalArgumentException if table is null or empty
    */
-  public HCatSourceTarget(@Nullable String database, String table, String filter) {
+  public HCatAvroSourceTarget(@Nullable String database, String table, String filter) {
     super(database, table);
-    this.database = Strings.isNullOrEmpty(database) ? DEFAULT_DATABASE_NAME : database;
+    this.database = Strings.isNullOrEmpty(database) ? Warehouse.DEFAULT_DATABASE_NAME : database;
     Preconditions.checkArgument(!StringUtils.isEmpty(table), "table cannot be null or empty");
     this.table = table;
     this.filter = filter;
   }
 
   @Override
-  public SourceTarget<HCatRecord> conf(String key, String value) {
+  public SourceTarget<AvroGenericRecordWritable> conf(String key, String value) {
     return null;
   }
 
   @Override
-  public Source<HCatRecord> inputConf(String key, String value) {
+  public Source<AvroGenericRecordWritable> inputConf(String key, String value) {
     bundle.set(key, value);
     return this;
   }
 
   @Override
-  public PType<HCatRecord> getType() {
+  public PType<AvroGenericRecordWritable> getType() {
     return PTYPE;
   }
 
@@ -163,7 +160,7 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
     }
   }
 
-  static Configuration configureHCatFormat(Configuration conf, FormatBundle<HCatInputFormat> bundle, String database,
+  static Configuration configureHCatFormat(Configuration conf, FormatBundle<HcatAvroInputFormat> bundle, String database,
       String table, String filter) {
     // It is tricky to get the HCatInputFormat configured correctly.
     //
@@ -176,7 +173,7 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
     // compares with the original one to see what has been added.
     Configuration newConf = new Configuration(conf);
     try {
-      HCatInputFormat.setInput(newConf, database, table, filter);
+      HcatAvroInputFormat.setInput(newConf, database, table, filter);
     } catch (IOException e) {
       throw new CrunchRuntimeException(e);
     }
@@ -289,7 +286,7 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
     if (o == null || !getClass().equals(o.getClass())) {
       return false;
     }
-    HCatSourceTarget that = (HCatSourceTarget) o;
+    HCatAvroSourceTarget that = (HCatAvroSourceTarget) o;
     return Objects.equal(this.database, that.database) && Objects.equal(this.table, that.table)
         && Objects.equal(this.filter, that.filter);
   }
@@ -310,22 +307,22 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
       return hiveTableCached;
     }
 
-    IMetaStoreClient hiveMetastoreClient = HCatUtil.getHiveMetastoreClient(new HiveConf(conf, HCatSourceTarget.class));
+    IMetaStoreClient hiveMetastoreClient = HCatUtil.getHiveMetastoreClient(new HiveConf(conf, HCatAvroSourceTarget.class));
     hiveTableCached = HCatUtil.getTable(hiveMetastoreClient, database, table);
     return hiveTableCached;
   }
 
   @Override
-  public Iterable<HCatRecord> read(Configuration conf) throws IOException {
+  public Iterable<AvroGenericRecordWritable> read(Configuration conf) throws IOException {
     if (hcatConf == null) {
       hcatConf = configureHCatFormat(conf, bundle, database, table, filter);
     }
 
-    return new HCatRecordDataIterable(bundle, hcatConf);
+    return new HCatAvroRecordDataIterable(bundle, hcatConf);
   }
 
   @Override
-  public ReadableData<HCatRecord> asReadable() {
-    return new HCatRecordDataReadable(bundle, database, table, filter);
+  public ReadableData<AvroGenericRecordWritable> asReadable() {
+    return new HCatAvroRecordDataReadable(bundle, database, table, filter);
   }
 }
