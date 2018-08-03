@@ -58,7 +58,7 @@ under the License.
                 <groupId>org.eclipse.jetty.orbit</groupId>
                 <artifactId>javax.servlet</artifactId>
             </exclusion>
-        </exclusions> 
+        </exclusions>
      </dependency>
 
     <dependency>
@@ -81,7 +81,8 @@ under the License.
                 <groupId>org.eclipse.jetty.orbit</groupId>
                 <artifactId>javax.servlet</artifactId>
             </exclusion>
-        </exclusions> 
+        </exclusions>
+        <version>3.0.0-beta1</version>
     </dependency>
 
     <dependency>

@@ -19,7 +19,13 @@ package org.apache.crunch.io.hcatalog;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import org.apache.avro.file.DataFileWriter;
+import org.apache.avro.generic.IndexedRecord;
+import org.apache.avro.specific.SpecificData;
+import org.apache.avro.specific.SpecificDatumWriter;
+import org.apache.avro.util.Utf8;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.crunch.PCollection;
 import org.apache.crunch.PTable;
 import org.apache.crunch.Pair;
@@ -27,7 +33,10 @@ import org.apache.crunch.Pipeline;
 import org.apache.crunch.ReadableData;
 import org.apache.crunch.impl.mr.MRPipeline;
 import org.apache.crunch.test.CrunchTestSupport;
+import org.apache.crunch.test.Player;
+import org.apache.crunch.test.Position;
 import org.apache.crunch.test.TemporaryPath;
+import org.apache.crunch.test.md5;
 import org.apache.crunch.types.avro.Avros;
 import org.apache.crunch.types.writable.Writables;
 import org.apache.hadoop.conf.Configuration;
@@ -41,14 +50,20 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.TableType;
+import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.serde2.SerDeException;
+import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
 import org.apache.hadoop.mapreduce.TaskInputOutputContext;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.hcatalog.data.DefaultHCatRecord;
 import org.apache.hive.hcatalog.data.HCatRecord;
 import org.apache.hive.hcatalog.data.schema.HCatSchema;
+import org.apache.thrift.TException;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -56,15 +71,21 @@ import org.junit.rules.TestName;
 import org.mockito.Mockito;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.when;
 
 public class HCatSourceITSpec extends CrunchTestSupport {
@@ -305,7 +326,123 @@ public class HCatSourceITSpec extends CrunchTestSupport {
     }
   }
 
-  // writes data to the specified location and ensures the directory exists
+  @Test
+  public void test_HCatToSpecificRecord_FromHCatAsAvro()
+          throws IOException, HiveException, TException, SerDeException {
+    String tableName = testName.getMethodName();
+    Path tableRootLocation = temporaryPath.getPath(tableName);
+
+    Map<CharSequence, CharSequence> teamCities = new HashMap<>();
+    teamCities.put(new Utf8("Ohio"), new Utf8("Cleveland"));
+    teamCities.put(new Utf8("Missouri"), new Utf8("Kansas City"));
+    teamCities.put(new Utf8("Washington"), new Utf8("Seattle"));
+    List<CharSequence> teams =
+            new SpecificData.Array<>(2, Player.getClassSchema().getField("previousTeams").schema());
+    teams.add(new Utf8("Cleveland Indians"));
+    teams.add(new Utf8("Kansas City Royals"));
+
+    byte[] md5 = new byte[16];
+    new Random().nextBytes(md5);
+    Player player =
+            Player.newBuilder()
+                    .setBattingAvg(0.310)
+                    .setName(new Utf8("Francisco Lindor"))
+                    .setHomeruns(50)
+                    .setPosition(Position.CenterField)
+                    .setPreviousTeams(teams)
+                    .setTeamLocation(teamCities)
+                    .setTeamLocation(teamCities)
+                    .setMd5(new md5(md5))
+                    .build();
+
+    Map<String, String> tableProps = new HashMap<>();
+    tableProps.put("avro.schema.literal", Player.getClassSchema().toString());
+
+    createAvroBackedTable(tableName, tableRootLocation, tableProps);
+    File fileName = temporaryPath.getFile("players.avro");
+    writeDatum(player, fileName);
+    moveDatumsToHdfs(fileName, tableRootLocation, conf);
+
+    Pipeline pipeline = new MRPipeline(HCatSourceITSpec.class, conf);
+
+    PCollection<AvroGenericRecordWritable> avroWritables = pipeline.read(FromHCat.avroTable(Warehouse.DEFAULT_DATABASE_NAME,
+            tableName));
+    PCollection<Player> players = avroWritables.parallelDo(new AvroWritableToSpecificFn<>(Player.class),
+            Avros.records(Player.class));
+
+
+    int datumSize = 0;
+    for (final Player read : players.materialize()) {
+      datumSize++;
+      assertModel(read, player, true);
+    }
+
+    Assert.assertEquals(datumSize, 1);
+  }
+
+  // compareFixed indicates if the fixed type should be compared. the test
+  // generates
+  // random bytes, so if the test generates the bytes itself, compare. if
+  // reading
+  // from disk, don't compare
+  private void assertModel(Player actual, Player expected, boolean compareFixed) {
+    if (compareFixed) assertThat(actual.getMd5(), is(expected.getMd5()));
+    assertThat(actual.getBattingAvg(), is(expected.getBattingAvg()));
+    assertThat(actual.getHomeruns(), is(expected.getHomeruns()));
+    assertThat(actual.getName(), is(expected.getName()));
+    assertThat(actual.getPosition(), is(expected.getPosition()));
+
+    assertMaps(actual.getTeamLocation(), expected.getTeamLocation());
+    assertThat(actual.getPreviousTeams().size(), is(expected.getPreviousTeams().size()));
+    assertTrue(actual.getPreviousTeams().containsAll(expected.getPreviousTeams()));
+  }
+
+  private void assertMaps(
+          Map<CharSequence, CharSequence> actual, Map<CharSequence, CharSequence> expected) {
+    assertThat(actual.size(), is(expected.size()));
+    for (final Map.Entry<CharSequence, CharSequence> entry : expected.entrySet()) {
+      CharSequence o = actual.get((entry.getKey()));
+      assertThat(o, is(entry.getValue()));
+    }
+  }
+
+
+  private <T extends IndexedRecord> void writeDatum(T datum, File location) throws IOException {
+    // closed by the data file writer
+    SpecificDatumWriter<T> writer = new SpecificDatumWriter<>();
+    try (DataFileWriter<T> fileWriter = new DataFileWriter<>(writer)) {
+      fileWriter.create(datum.getSchema(), location);
+      fileWriter.append(datum);
+    }
+  }
+
+  private void moveDatumsToHdfs(File src, Path dest, Configuration conf) throws IOException {
+    FileSystem fs = dest.getFileSystem(conf);
+    fs.mkdirs(dest);
+    fs.copyFromLocalFile(new Path(src.toString()), dest);
+  }
+
+  private org.apache.hadoop.hive.ql.metadata.Table createAvroBackedTable(
+          String tableName, Path tableRootLocation, Map<String, String> tableProps)
+          throws IOException, HiveException, TException {
+
+    String serdeLib = "org.apache.hadoop.hive.serde2.avro.AvroSerDe";
+    String inputFormat = "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat";
+    String outputFormat = "org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat";
+
+    return createTable(
+            tableName,
+            tableRootLocation,
+            tableProps,
+            new HashMap<String, String>(),
+            serdeLib,
+            inputFormat,
+            outputFormat,
+            new ArrayList<FieldSchema>());
+  }
+
+
+    // writes data to the specified location and ensures the directory exists
   // prior to writing
   private Path writeDataToHdfs(String data, Path location, Configuration conf) throws IOException {
     FileSystem fs = location.getFileSystem(conf);
@@ -318,5 +455,44 @@ public class HCatSourceITSpec extends CrunchTestSupport {
     }
 
     return writeLocation;
+  }
+
+  private org.apache.hadoop.hive.ql.metadata.Table createTable(
+          String tableName,
+          Path tableRootLocation,
+          Map<String, String> tableProps,
+          Map<String, String> serDeParams,
+          String serdeLib,
+          String inputFormatClass,
+          String outputFormatClass,
+          List<FieldSchema> fields)
+          throws IOException, HiveException, TException {
+
+    org.apache.hadoop.hive.ql.metadata.Table tbl =
+            new org.apache.hadoop.hive.ql.metadata.Table("default", tableName);
+    tbl.setOwner(UserGroupInformation.getCurrentUser().getShortUserName());
+    tbl.setTableType(TableType.EXTERNAL_TABLE);
+
+    if (tableRootLocation != null) tbl.setDataLocation(tableRootLocation);
+
+    tbl.setSerializationLib(serdeLib);
+
+    if (StringUtils.isNotBlank(inputFormatClass)) tbl.setInputFormatClass(inputFormatClass);
+
+    if (StringUtils.isNotBlank(outputFormatClass)) tbl.setOutputFormatClass(outputFormatClass);
+
+    for (final Map.Entry<String, String> config : tableProps.entrySet()) {
+      tbl.setProperty(config.getKey(), config.getValue());
+    }
+
+    for (final Map.Entry<String, String> config : serDeParams.entrySet()) {
+      tbl.setSerdeParam(config.getKey(), config.getValue());
+    }
+
+    if (!fields.isEmpty()) tbl.setFields(fields);
+
+    client.createTable(tbl.getTTable());
+
+    return tbl;
   }
 }
