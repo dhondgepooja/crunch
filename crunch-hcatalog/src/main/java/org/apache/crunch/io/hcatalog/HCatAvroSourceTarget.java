@@ -39,7 +39,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.Warehouse;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
 import org.apache.hadoop.mapreduce.Job;
@@ -82,7 +82,7 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
    * @throw IllegalArgumentException if table is null or empty
    */
   public HCatAvroSourceTarget(String table) {
-    this(Warehouse.DEFAULT_DATABASE_NAME, table);
+    this(MetaStoreUtils.DEFAULT_DATABASE_NAME, table);
   }
 
   /**
@@ -115,7 +115,7 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
    */
   public HCatAvroSourceTarget(@Nullable String database, String table, String filter) {
     super(database, table);
-    this.database = Strings.isNullOrEmpty(database) ? Warehouse.DEFAULT_DATABASE_NAME : database;
+    this.database = Strings.isNullOrEmpty(database) ? MetaStoreUtils.DEFAULT_DATABASE_NAME : database;
     Preconditions.checkArgument(!StringUtils.isEmpty(table), "table cannot be null or empty");
     this.table = table;
     this.filter = filter;
@@ -160,8 +160,8 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
     }
   }
 
-  static Configuration configureHCatFormat(Configuration conf, FormatBundle<HcatAvroInputFormat> bundle, String database,
-      String table, String filter) {
+   static Configuration configureHCatFormat(Configuration conf, FormatBundle<HcatAvroInputFormat> bundle, String database,
+                                    String table, String filter) {
     // It is tricky to get the HCatInputFormat configured correctly.
     //
     // The first parameter of setInput() is for both input and output.
@@ -187,6 +187,7 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
     }
 
     return newConf;
+
   }
 
   @Override
@@ -275,6 +276,8 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
     return HCatUtil.extractSchema(hiveTable);
   }
 
+
+
   @Override
   public long getLastModifiedAt(Configuration conf) {
     LOGGER.warn("Unable to determine the last modified time for db [{}] and table [{}]", database, table);
@@ -302,7 +305,8 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
         .toString();
   }
 
-  private Table getHiveTable(Configuration conf) throws IOException, TException {
+  private Table getHiveTable(Configuration conf) throws IOException,
+          TException {
     if (hiveTableCached != null) {
       return hiveTableCached;
     }

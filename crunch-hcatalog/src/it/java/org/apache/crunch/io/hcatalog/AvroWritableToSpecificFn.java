@@ -18,38 +18,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-
+import java.util.Properties;
 
 
 public class AvroWritableToSpecificFn<T extends SpecificRecord> extends MapFn<AvroGenericRecordWritable, T> {
 
-    private final Class<T> readerClazz;
-
-    /**
-     * Instantiates a new instance, and configures the conversion to use the
-     * specified {@code readerClazz}.
-     *
-     * @param readerClazz
-     *          the avro class for conversion
-     * @throws IllegalArgumentException if {@code readerClazz} is null
-     */
-    public AvroWritableToSpecificFn(Class<T> readerClazz) {
-        if (readerClazz == null)
-            throw new IllegalArgumentException("readerClazz cannot be null");
-
-        this.readerClazz = readerClazz;
-    }
-
-
     @Override
     public T map(AvroGenericRecordWritable input) {
-        GenericRecord genericRecord = input.getRecord();
-        AvroSerDe avroSerDe = new AvroSerDe();
-        try {
-            return readerClazz.cast(avroSerDe.deserialize(input));
-        } catch (SerDeException e) {
-            e.printStackTrace();
-        }
-        return null;
+        return (T) new SpecificData().deepCopy(input.getFileSchema(), input.getRecord());
     }
 }

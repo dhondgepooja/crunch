@@ -53,7 +53,7 @@ import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.hadoop.hive.metastore.Warehouse.DEFAULT_DATABASE_NAME;
+import static org.apache.hadoop.hive.metastore.MetaStoreUtils.DEFAULT_DATABASE_NAME;
 
 import java.io.IOException;
 import java.util.List;
@@ -77,14 +77,14 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
 
   /**
    * Creates a new instance to read from the specified {@code table} and the
-   * {@link org.apache.hadoop.hive.metastore.Warehouse#DEFAULT_DATABASE_NAME
+   * {@link org.apache.hadoop.hive.metastore.MetaStoreUtils#DEFAULT_DATABASE_NAME
    * default} database
    *
    * @param table
    * @throw IllegalArgumentException if table is null or empty
    */
   public HCatSourceTarget(String table) {
-    this(Warehouse.DEFAULT_DATABASE_NAME, table);
+    this(DEFAULT_DATABASE_NAME, table);
   }
 
   /**
@@ -105,7 +105,7 @@ public class HCatSourceTarget extends HCatTarget implements ReadableSourceTarget
    * Creates a new instance to read from the specified {@code database} and
    * {@code table}, restricting partitions by the specified {@code filter}. If
    * the database isn't specified it will default to the
-   * {@link org.apache.hadoop.hive.metastore.Warehouse#DEFAULT_DATABASE_NAME
+   * {@link org.apache.hadoop.hive.metastore.MetaStoreUtils#DEFAULT_DATABASE_NAME
    * default} database.
    *
    * @param database

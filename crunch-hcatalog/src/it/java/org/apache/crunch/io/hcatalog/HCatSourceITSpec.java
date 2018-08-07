@@ -31,7 +31,9 @@ import org.apache.crunch.PTable;
 import org.apache.crunch.Pair;
 import org.apache.crunch.Pipeline;
 import org.apache.crunch.ReadableData;
+import org.apache.crunch.impl.mem.MemPipeline;
 import org.apache.crunch.impl.mr.MRPipeline;
+import org.apache.crunch.io.From;
 import org.apache.crunch.test.CrunchTestSupport;
 import org.apache.crunch.test.Player;
 import org.apache.crunch.test.Position;
@@ -49,6 +51,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -363,14 +366,16 @@ public class HCatSourceITSpec extends CrunchTestSupport {
     writeDatum(player, fileName);
     moveDatumsToHdfs(fileName, tableRootLocation, conf);
 
-    Pipeline pipeline = new MRPipeline(HCatSourceITSpec.class, conf);
+    //Pipeline pipeline = new MRPipeline(HCatSourceITSpec.class, conf);
 
-    PCollection<AvroGenericRecordWritable> avroWritables = pipeline.read(FromHCat.avroTable(Warehouse.DEFAULT_DATABASE_NAME,
+    Pipeline pipeline = MemPipeline.getInstance();
+    pipeline.setConfiguration(conf);
+    PCollection<AvroGenericRecordWritable> avroWritables = pipeline.read(FromHCat.avroTable(MetaStoreUtils.DEFAULT_DATABASE_NAME,
             tableName));
-    PCollection<Player> players = avroWritables.parallelDo(new AvroWritableToSpecificFn<>(Player.class),
+    PCollection<Player> players = avroWritables.parallelDo(new AvroWritableToSpecificFn(),
             Avros.records(Player.class));
 
-
+    pipeline.done();
     int datumSize = 0;
     for (final Player read : players.materialize()) {
       datumSize++;
