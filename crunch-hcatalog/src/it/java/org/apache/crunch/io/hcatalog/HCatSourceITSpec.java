@@ -35,6 +35,7 @@ import org.apache.crunch.impl.mem.MemPipeline;
 import org.apache.crunch.impl.mr.MRPipeline;
 import org.apache.crunch.io.From;
 import org.apache.crunch.test.CrunchTestSupport;
+import org.apache.crunch.test.Person;
 import org.apache.crunch.test.Player;
 import org.apache.crunch.test.Position;
 import org.apache.crunch.test.TemporaryPath;
@@ -59,6 +60,7 @@ import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.serde2.SerDeException;
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
+import org.apache.hadoop.hive.serde2.avro.AvroSpecificRecordWritable;
 import org.apache.hadoop.mapreduce.TaskInputOutputContext;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hive.hcatalog.data.DefaultHCatRecord;
@@ -370,11 +372,11 @@ public class HCatSourceITSpec extends CrunchTestSupport {
 
     Pipeline pipeline = MemPipeline.getInstance();
     pipeline.setConfiguration(conf);
-    PCollection<AvroGenericRecordWritable> avroWritables = pipeline.read(FromHCat.avroTable(MetaStoreUtils.DEFAULT_DATABASE_NAME,
-            tableName));
+    FromHCat<Player> fromPlayers = new FromHCat<>();
+    PCollection<AvroSpecificRecordWritable> avroWritables = pipeline.read(fromPlayers.avroTable(MetaStoreUtils
+                    .DEFAULT_DATABASE_NAME, tableName));
     PCollection<Player> players = avroWritables.parallelDo(new AvroWritableToSpecificFn(),
             Avros.records(Player.class));
-
     pipeline.done();
     int datumSize = 0;
     for (final Player read : players.materialize()) {
@@ -432,7 +434,7 @@ public class HCatSourceITSpec extends CrunchTestSupport {
           throws IOException, HiveException, TException {
 
     String serdeLib = "org.apache.hadoop.hive.serde2.avro.AvroSerDe";
-    String inputFormat = "org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat";
+    String inputFormat = "org.apache.hadoop.hive.ql.io.avro.AvroSpecificContainerInputFormat";
     String outputFormat = "org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat";
 
     return createTable(

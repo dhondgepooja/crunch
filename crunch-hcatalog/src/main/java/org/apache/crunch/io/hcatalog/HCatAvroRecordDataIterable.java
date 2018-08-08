@@ -3,10 +3,12 @@ package org.apache.crunch.io.hcatalog;
 import com.google.common.base.Function;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import org.apache.avro.specific.SpecificRecord;
 import org.apache.crunch.CrunchRuntimeException;
 import org.apache.crunch.io.FormatBundle;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
+import org.apache.hadoop.hive.serde2.avro.AvroSpecificRecordWritable;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.InputSplit;
@@ -23,7 +25,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Iterator;
 
-public class HCatAvroRecordDataIterable implements Iterable<AvroGenericRecordWritable> {
+public class HCatAvroRecordDataIterable<T extends SpecificRecord> implements Iterable<AvroSpecificRecordWritable<T>> {
 
     private static final Logger LOG = LoggerFactory.getLogger(HCatAvroRecordDataIterable.class);
 
@@ -37,7 +39,7 @@ public class HCatAvroRecordDataIterable implements Iterable<AvroGenericRecordWri
 
 
     @Override
-    public Iterator<AvroGenericRecordWritable> iterator() {
+    public Iterator<AvroSpecificRecordWritable<T>> iterator() {
         try {
             Job job = Job.getInstance(bundle.configure(conf));
 

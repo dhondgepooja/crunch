@@ -18,11 +18,13 @@
 package org.apache.crunch.io.hcatalog;
 
 import com.google.common.collect.ImmutableSet;
+import org.apache.avro.specific.SpecificRecord;
 import org.apache.crunch.ReadableData;
 import org.apache.crunch.SourceTarget;
 import org.apache.crunch.io.FormatBundle;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
+import org.apache.hadoop.hive.serde2.avro.AvroSpecificRecordWritable;
 import org.apache.hadoop.mapreduce.TaskInputOutputContext;
 import org.apache.hive.hcatalog.data.HCatRecord;
 import org.apache.hive.hcatalog.mapreduce.HCatInputFormat;
@@ -31,7 +33,7 @@ import org.apache.hive.hcatalog.mapreduce.HcatAvroInputFormat;
 import java.io.IOException;
 import java.util.Set;
 
-public class HCatAvroRecordDataReadable implements ReadableData<AvroGenericRecordWritable> {
+public class HCatAvroRecordDataReadable<T extends SpecificRecord> implements ReadableData<AvroSpecificRecordWritable<T>> {
 
   private final FormatBundle<HcatAvroInputFormat> bundle;
   private final String database;
@@ -59,7 +61,7 @@ public class HCatAvroRecordDataReadable implements ReadableData<AvroGenericRecor
   }
 
   @Override
-  public Iterable<AvroGenericRecordWritable> read(TaskInputOutputContext<?, ?, ?, ?> context) throws IOException {
+  public Iterable<AvroSpecificRecordWritable<T>> read(TaskInputOutputContext<?, ?, ?, ?> context) throws IOException {
     return new HCatAvroRecordDataIterable(bundle, context.getConfiguration());
   }
 }

@@ -20,6 +20,7 @@ package org.apache.crunch.io.hcatalog;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import org.apache.avro.specific.SpecificRecord;
 import org.apache.commons.lang.builder.ToStringBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.crunch.CrunchRuntimeException;
@@ -42,6 +43,7 @@ import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
+import org.apache.hadoop.hive.serde2.avro.AvroSpecificRecordWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hive.hcatalog.common.HCatConstants;
 import org.apache.hive.hcatalog.common.HCatUtil;
@@ -59,10 +61,11 @@ import java.util.List;
 import java.util.Map;
 
 
-public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTarget<AvroGenericRecordWritable> {
+public class HCatAvroSourceTarget<T extends SpecificRecord> extends HCatTarget implements
+        ReadableSourceTarget<AvroSpecificRecordWritable> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(HCatAvroSourceTarget.class);
-  private static final PType<AvroGenericRecordWritable> PTYPE = Writables.writables(AvroGenericRecordWritable.class);
+  private static final PType<AvroSpecificRecordWritable> PTYPE = Writables.writables(AvroSpecificRecordWritable.class);
   private Configuration hcatConf;
 
   private final FormatBundle<HcatAvroInputFormat> bundle = FormatBundle.forInput(HcatAvroInputFormat.class);
@@ -122,18 +125,18 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
   }
 
   @Override
-  public SourceTarget<AvroGenericRecordWritable> conf(String key, String value) {
+  public SourceTarget<AvroSpecificRecordWritable> conf(String key, String value) {
     return null;
   }
 
   @Override
-  public Source<AvroGenericRecordWritable> inputConf(String key, String value) {
+  public Source<AvroSpecificRecordWritable> inputConf(String key, String value) {
     bundle.set(key, value);
     return this;
   }
 
   @Override
-  public PType<AvroGenericRecordWritable> getType() {
+  public PType<AvroSpecificRecordWritable> getType() {
     return PTYPE;
   }
 
@@ -317,7 +320,7 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
   }
 
   @Override
-  public Iterable<AvroGenericRecordWritable> read(Configuration conf) throws IOException {
+  public Iterable<AvroSpecificRecordWritable> read(Configuration conf) throws IOException {
     if (hcatConf == null) {
       hcatConf = configureHCatFormat(conf, bundle, database, table, filter);
     }
@@ -326,7 +329,7 @@ public class HCatAvroSourceTarget extends HCatTarget implements ReadableSourceTa
   }
 
   @Override
-  public ReadableData<AvroGenericRecordWritable> asReadable() {
+  public ReadableData<AvroSpecificRecordWritable> asReadable() {
     return new HCatAvroRecordDataReadable(bundle, database, table, filter);
   }
 }

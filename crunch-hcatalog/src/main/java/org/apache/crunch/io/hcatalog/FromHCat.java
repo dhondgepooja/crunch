@@ -17,8 +17,8 @@
  */
 package org.apache.crunch.io.hcatalog;
 
+import org.apache.avro.specific.SpecificRecord;
 import org.apache.crunch.Source;
-import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable;
 import org.apache.hive.hcatalog.data.HCatRecord;
 
 import javax.annotation.Nullable;
@@ -36,9 +36,11 @@ import javax.annotation.Nullable;
  * }
  * </pre>
  */
-public final class FromHCat {
+public final class FromHCat <T extends SpecificRecord> {
+  HCatAvroSourceTarget<T> target;
 
-  private FromHCat() {
+
+  public FromHCat() {
   }
 
   /**
@@ -66,8 +68,9 @@ public final class FromHCat {
     return new HCatSourceTarget(database, table);
   }
 
-  public static Source<AvroGenericRecordWritable> avroTable(String database, String table){
-    return new HCatAvroSourceTarget(database,table);
+  public HCatAvroSourceTarget<T> avroTable(String database, String table){
+    target = new HCatAvroSourceTarget<>(database, table);
+    return target;
   }
 
   /**
